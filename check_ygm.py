@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import requests
 from typing import Dict, Tuple, List
 
@@ -11,6 +12,7 @@ PAGES: Dict[str, str] = {
 }
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+STATE_FILE = "state.json"
 
 
 def send_discord_message(message: str) -> None:
@@ -29,6 +31,26 @@ def send_discord_message(message: str) -> None:
         print("Discord notification sent.")
     except Exception as e:
         print(f"Error sending Discord notification: {e}", file=sys.stderr)
+
+
+def load_state() -> Dict[str, str]:
+    """Load previous page state from state.json."""
+    try:
+        with open(STATE_FILE, "r") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except FileNotFoundError:
+        pass
+    except json.JSONDecodeError:
+        pass
+    return {}  # default: no state yet
+
+
+def save_state(state: Dict[str, str]) -> None:
+    """Save current page state to state.json."""
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
 
 
 def check_shop_page(name: str, url: str) -> Tuple[bool, str]:
@@ -60,7 +82,7 @@ def check_bowler_hat_page(name: str, url: str) -> Tuple[bool, str]:
     """
     Logic for the Bowler Hat entry page.
 
-    When closed it says:
+    When closed it says something like:
     'The Bowler Hat entry period has now ended...'
 
     We treat that message as 'closed'. If that message disappears / changes,
@@ -97,30 +119,40 @@ def check_page(name: str, url: str) -> Tuple[bool, str]:
 
 
 def main() -> None:
-    pages_with_activity: List[Tuple[str, str]] = []
+    previous_state = load_state()  # e.g. {"Shop": "empty", "Bowler Hat": "active"}
+    current_state: Dict[str, str] = {}
+    newly_active: List[Tuple[str, str]] = []
     debug_lines: List[str] = []
 
     for name, url in PAGES.items():
         has_activity, info = check_page(name, url)
         debug_lines.append(info)
-        if has_activity:
-            pages_with_activity.append((name, url))
 
-    # Log what happened to GitHub Actions logs
+        # Track current state
+        current_state[name] = "active" if has_activity else "empty"
+
+        # Only count as "newly active" if it was not active before
+        if has_activity and previous_state.get(name) != "active":
+            newly_active.append((name, url))
+
+    # Log for debugging in Actions
     print("\n".join(debug_lines))
 
-    # ONLY notify if at least one page looks live
-    if not pages_with_activity:
-        print("No activity detected on any monitored page this run.")
+    # Save state for the next run
+    save_state(current_state)
+
+    # If nothing has just turned active, don't notify
+    if not newly_active:
+        print("No newly active pages this run.")
         return
 
-    # Build a single alert summarising all 'hot' pages
+    # Build a single alert summarising all pages that just changed to active
     lines = [
         "👻 **York Ghost Merchants Alert**",
         "",
-        "Possible drop / entry detected on:",
+        "New activity detected on:",
     ]
-    for name, url in pages_with_activity:
+    for name, url in newly_active:
         lines.append(f"- **{name}** → {url}")
 
     lines.append("")
