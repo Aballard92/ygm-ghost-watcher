@@ -7,8 +7,7 @@ from typing import Dict, Tuple, List
 # Pages to watch
 PAGES: Dict[str, str] = {
     "Shop": "https://www.yorkghostmerchants.com/shop",
-    # Bowler Hat entry page – shows "entry period has now ended" when closed
-    "Bowler Hat": "https://yorkghostmerchants.co.uk/apply/null",
+    "Bowler Hat": "https://www.yorkghostmerchants.com/bowlerhat",
 }
 
 WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
@@ -53,9 +52,9 @@ def save_state(state: Dict[str, str]) -> None:
         json.dump(state, f)
 
 
-def check_shop_page(name: str, url: str) -> Tuple[bool, str]:
+def check_store_page(name: str, url: str) -> Tuple[bool, str]:
     """
-    Logic for the main shop page.
+    Check a Squarespace store page (Shop or Bowler Hat).
 
     Returns (has_stock, info_message).
     has_stock = True if 'No results found' is NOT present.
@@ -72,50 +71,19 @@ def check_shop_page(name: str, url: str) -> Tuple[bool, str]:
 
     html = resp.text
 
+    # Strong empty signal
     if "No results found" in html:
         return False, f"{name}: no results found."
-    else:
-        return True, f"{name}: POSSIBLE STOCK DETECTED (no 'No results found')."
 
+    # Optional positive markers – not required, but extra confirmation
+    positive_markers = ["add to cart", "add-to-cart", "sqs-add-to-cart"]
+    positives_found = [m for m in positive_markers if m.lower() in html.lower()]
 
-def check_bowler_hat_page(name: str, url: str) -> Tuple[bool, str]:
-    """
-    Logic for the Bowler Hat entry page.
+    if positives_found:
+        return True, f"{name}: POSSIBLE STOCK DETECTED ({', '.join(positives_found)})."
 
-    When closed it says something like:
-    'The Bowler Hat entry period has now ended...'
-
-    We treat that message as 'closed'. If that message disappears / changes,
-    we assume the entry period may be open.
-    """
-    try:
-        resp = requests.get(
-            url,
-            headers={"User-Agent": "Mozilla/5.0 (YGM watcher)"},
-            timeout=20,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        return False, f"{name}: error fetching page: {e}"
-
-    html = resp.text
-    closed_phrase = "entry period has now ended"
-
-    if closed_phrase.lower() in html.lower():
-        return False, f"{name}: entry period closed."
-    else:
-        return True, f"{name}: POSSIBLE ENTRY WINDOW OPEN (closed message missing)."
-
-
-def check_page(name: str, url: str) -> Tuple[bool, str]:
-    """Dispatch to the right checker based on page name."""
-    if name == "Shop":
-        return check_shop_page(name, url)
-    elif name == "Bowler Hat":
-        return check_bowler_hat_page(name, url)
-    else:
-        # Fallback: treat like shop
-        return check_shop_page(name, url)
+    # Fallback: 'No results found' is gone, assume something is up
+    return True, f"{name}: POSSIBLE STOCK DETECTED (no 'No results found')."
 
 
 def main() -> None:
@@ -125,7 +93,7 @@ def main() -> None:
     debug_lines: List[str] = []
 
     for name, url in PAGES.items():
-        has_activity, info = check_page(name, url)
+        has_activity, info = check_store_page(name, url)
         debug_lines.append(info)
 
         # Track current state
