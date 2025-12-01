@@ -53,7 +53,9 @@ def check_shop_page(name: str, url: str) -> Tuple[bool, str]:
     if "No results found" in html:
         return False, f"{name}: no results found."
     else:
-        return True, f"{name}: POSSIBLE STOCK DETECTED (no 'No results found')."
+        # TEMP FOR TESTING: always treat as stock
+        return True, f"{name}: TEST – treating as stock."
+
 
 
 def check_bowler_hat_page(name: str, url: str) -> Tuple[bool, str]:
