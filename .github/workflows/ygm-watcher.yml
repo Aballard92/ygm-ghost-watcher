@@ -1,0 +1,29 @@
+name: York Ghost Merchants Watcher
+
+on:
+  schedule:
+    # Every 5 minutes – change to "*/10" for every 10 minutes instead
+    - cron: "*/5 * * * *"
+  # Optional: lets you trigger it manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  check-shop:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run YGM checker
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python check_ygm.py
