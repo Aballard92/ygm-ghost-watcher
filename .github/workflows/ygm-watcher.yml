@@ -2,10 +2,13 @@ name: York Ghost Merchants Watcher
 
 on:
   schedule:
-    # Every 5 minutes – change to "*/10" for every 10 minutes instead
+    # Every 5 minutes (minimum reliable interval on GitHub Actions)
     - cron: "*/5 * * * *"
-  # Optional: lets you trigger it manually from the Actions tab
   workflow_dispatch:
+
+# NEW: allow this workflow to push changes (for state.json)
+permissions:
+  contents: write
 
 jobs:
   check-shop:
@@ -14,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true  # make sure git push can use GITHUB_TOKEN
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -27,3 +32,16 @@ jobs:
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python check_ygm.py
+
+      # NEW: commit updated state.json if it changed
+      - name: Commit updated state
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "Update watcher state [skip ci]" || exit 0
+            git push
+          else
+            echo "No state changes to commit."
+          fi
